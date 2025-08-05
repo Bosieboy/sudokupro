@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sudoku Puzzle Solver</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #34495e;
+            --accent-color: #3498db;
+            --text-color: #ecf0f1;
+            --light-text-color: #bdc3c7;
+            --grid-line-color: #000;
+            --cell-bg-color: #fff;
+            --fixed-cell-bg-color: #e9ecef;
+            --active-cell-bg-color: #b3e5fc;
+            --highlight-bg-color: #eaf6ff;
+            --error-color: #e74c3c;
+            --success-color: #2ecc71;
+            --button-bg-color: #2980b9;
+            --button-hover-bg-color: #3498db;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--primary-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            flex-direction: column;
+        }
+
+        .container {
+            text-align: center;
+            padding: 30px;
+            background-color: var(--secondary-color);
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            max-width: 90%;
+            width: 500px;
+        }
+
+        h1 {
+            color: var(--accent-color);
+            margin-bottom: 20px;
+        }
+
+        #file-selector {
+            margin-bottom: 20px;
+            padding: 10px;
+            font-size: 16px;
+            background-color: var(--cell-bg-color);
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .sudoku-grid {
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            margin: 0 auto;
+            border-top: 2px solid var(--grid-line-color);
+            border-left: 2px solid var(--grid-line-color);
+            box-sizing: border-box;
+        }
+
+        .sudoku-cell {
+            aspect-ratio: 1 / 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-right: 1px solid var(--grid-line-color);
+            border-bottom: 1px solid var(--grid-line-color);
+            box-sizing: border-box;
+            font-size: clamp(14px, 4vw, 24px);
+            font-weight: bold;
+            background-color: var(--cell-bg-color);
+            color: var(--primary-color);
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .sudoku-cell.fixed {
+            background-color: var(--fixed-cell-bg-color);
+            color: var(--primary-color);
+            cursor: default;
+        }
+
+        .sudoku-cell.active {
+            background-color: var(--active-cell-bg-color);
+            outline: 2px solid var(--accent-color);
+            outline-offset: -2px;
+        }
+
+        .sudoku-cell.highlight {
+            background-color: var(--highlight-bg-color);
+        }
+
+        .sudoku-cell.error {
+            color: white;
+            background-color: var(--error-color) !important;
+        }
+        
+        /* Dikke verticale lijnen voor kolommen 3, 6 en 9 */
+        .sudoku-cell:nth-child(9n+3),
+        .sudoku-cell:nth-child(9n+6),
+        .sudoku-cell:nth-child(9n+9) {
+            border-right-width: 2px;
+        }
+
+        /* Dikke horizontale lijnen voor rijen 3, 6 en 9 */
+        .sudoku-cell:nth-child(n+19):nth-child(-n+27),
+        .sudoku-cell:nth-child(n+46):nth-child(-n+54),
+        .sudoku-cell:nth-child(n+73):nth-child(-n+81) {
+            border-bottom-width: 2px;
+        }
+
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .controls button {
+            padding: 10px 20px;
+            font-size: 16px;
+            color: var(--text-color);
+            background-color: var(--button-bg-color);
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .controls button:hover {
+            background-color: var(--button-hover-bg-color);
+        }
+        
+        #message-box {
+            margin-top: 20px;
+            min-height: 20px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .success { color: var(--success-color); }
+        .error { color: var(--error-color); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sudoku Puzzle Solver</h1>
+        
+        <input type="file" id="file-selector" accept=".txt">
+
+        <div class="sudoku-grid" id="sudoku-grid"></div>
+
+        <div class="controls">
+            <button id="check-button">Check</button>
+            <button id="solve-button">Solve</button>
+            <button id="clear-button">Clear</button>
+        </div>
+
+        <div id="message-box"></div>
+    </div>
+
+    <script>
+        const fileSelector = document.getElementById('file-selector');
+        const gridElement = document.getElementById('sudoku-grid');
+        const checkButton = document.getElementById('check-button');
+        const solveButton = document.getElementById('solve-button');
+        const clearButton = document.getElementById('clear-button');
+        const messageBox = document.getElementById('message-box');
+
+        let initialGrid = [];
+        let currentGrid = [];
+        let solvedGrid = [];
+        let activeCell = null;
+
+        // Backtracking algorithm to solve the puzzle
+        const solveSudoku = (grid) => {
+            for (let row = 0; row < 9; row++) {
+                for (let col = 0; col < 9; col++) {
+                    if (grid[row][col] === 0) {
+                        for (let num = 1; num <= 9; num++) {
+                            if (isValid(grid, row, col, num)) {
+                                grid[row][col] = num;
+                                if (solveSudoku(grid)) {
+                                    return true;
+                                }
+                                grid[row][col] = 0;
+                            }
+                        }
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+
+        const isValid = (grid, row, col, num) => {
+            // Check row and column
+            for (let i = 0; i < 9; i++) {
+                if (grid[row][i] === num || grid[i][col] === num) {
+                    return false;
+                }
+            }
+            // Check 3x3 box
+            const startRow = Math.floor(row / 3) * 3;
+            const startCol = Math.floor(col / 3) * 3;
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    if (grid[startRow + i][startCol + j] === num) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+
+        const renderGrid = (grid) => {
+            gridElement.innerHTML = '';
+            for (let row = 0; row < 9; row++) {
+                for (let col = 0; col < 9; col++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('sudoku-cell');
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+                    cell.textContent = grid[row][col] === 0 ? '' : grid[row][col];
+                    
+                    if (initialGrid[row][col] !== 0) {
+                        cell.classList.add('fixed');
+                    } else {
+                        cell.addEventListener('click', () => {
+                            if (activeCell) {
+                                activeCell.classList.remove('active');
+                            }
+                            activeCell = cell;
+                            activeCell.classList.add('active');
+                        });
+                    }
+                    gridElement.appendChild(cell);
+                }
+            }
+        };
+
+        // Handles keyboard input for the active cell
+        const handleKeyPress = (event) => {
+            if (!activeCell) return;
+
+            const key = event.key;
+            if (key >= '1' && key <= '9') {
+                const row = parseInt(activeCell.dataset.row);
+                const col = parseInt(activeCell.dataset.col);
+                
+                activeCell.textContent = key;
+                currentGrid[row][col] = parseInt(key);
+            } else if (key === '0' || key === 'Backspace' || key === 'Delete') {
+                const row = parseInt(activeCell.dataset.row);
+                const col = parseInt(activeCell.dataset.col);
+
+                activeCell.textContent = '';
+                currentGrid[row][col] = 0;
+            }
+        };
+
+        const handleFileLoad = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const text = e.target.result;
+                const rows = text.trim().split('\n');
+                initialGrid = rows.map(row => row.split(' ').map(Number));
+                currentGrid = JSON.parse(JSON.stringify(initialGrid)); // Deep copy
+                
+                let solutionCandidate = JSON.parse(JSON.stringify(initialGrid));
+                if (solveSudoku(solutionCandidate)) {
+                    solvedGrid = solutionCandidate;
+                } else {
+                    console.error("Could not find a unique solution for this puzzle.");
+                    solvedGrid = [];
+                }
+
+                renderGrid(currentGrid);
+                messageBox.textContent = "Puzzle loaded. Click on an empty cell to begin.";
+                messageBox.className = '';
+            };
+            reader.readAsText(file);
+        };
+
+        const checkSolution = () => {
+            if (!currentGrid.length) {
+                messageBox.textContent = "Please load a puzzle first.";
+                messageBox.className = 'error';
+                return;
+            }
+
+            let isCorrect = true;
+            document.querySelectorAll('.sudoku-cell').forEach(cell => cell.classList.remove('error'));
+
+            for (let row = 0; row < 9; row++) {
+                for (let col = 0; col < 9; col++) {
+                    const value = currentGrid[row][col];
+                    const cellElement = gridElement.querySelector(`[data-row='${row}'][data-col='${col}']`);
+                    
+                    if (value !== 0 && value !== solvedGrid[row][col]) {
+                        cellElement.classList.add('error');
+                        isCorrect = false;
+                    }
+                }
+            }
+
+            if (isCorrect && !currentGrid.flat().includes(0)) {
+                messageBox.textContent = "Congratulations! You solved the puzzle! 🎉";
+                messageBox.className = 'success';
+            } else if (isCorrect) {
+                messageBox.textContent = "So far so good! No errors found.";
+                messageBox.className = 'success';
+            } else {
+                messageBox.textContent = "You have some errors. Keep trying!";
+                messageBox.className = 'error';
+            }
+        };
+
+        const solvePuzzle = () => {
+            if (!solvedGrid.length) {
+                messageBox.textContent = "Please load a puzzle first.";
+                messageBox.className = 'error';
+                return;
+            }
+            currentGrid = JSON.parse(JSON.stringify(solvedGrid));
+            renderGrid(currentGrid);
+            messageBox.textContent = "Puzzle solved!";
+            messageBox.className = 'success';
+        };
+
+        const clearPuzzle = () => {
+            if (!initialGrid.length) {
+                messageBox.textContent = "Please load a puzzle first.";
+                messageBox.className = 'error';
+                return;
+            }
+            currentGrid = JSON.parse(JSON.stringify(initialGrid));
+            renderGrid(currentGrid);
+            messageBox.textContent = "Puzzle cleared.";
+            messageBox.className = '';
+        };
+
+        // Event Listeners
+        fileSelector.addEventListener('change', handleFileLoad);
+        checkButton.addEventListener('click', checkSolution);
+        solveButton.addEventListener('click', solvePuzzle);
+        clearButton.addEventListener('click', clearPuzzle);
+        document.addEventListener('keydown', handleKeyPress);
+    </script>
+</body>
+</html>
