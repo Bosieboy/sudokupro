@@ -1,0 +1,1 @@
+generate solve and print download zip unzip and execute the exe and done
